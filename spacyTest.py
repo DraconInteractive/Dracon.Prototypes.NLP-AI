@@ -1,11 +1,13 @@
 #pip install -U spacy
 #spacy download en_core_web_sm
 #spacy download en_core_web_trf
+#pip install tensorflow
 
 import os
 import spacy
 from spacy import displacy
 import validatePath as vp
+import tensorflow as tf
 
 class Verb:
 	def __init__(self, token):
@@ -143,10 +145,66 @@ class OutputAction(Action):
 				nounCount += 1
 		print(f"Verbs: {verbCount}, Nouns: {nounCount}")
 
+class TF:
+	def run(self):
+		# Need a dataset
+		# Will come from Spacy in form of NLP elements
+		
+		pass
+
+	def run_example(self):
+		print("TensorFlow version: ", tf.__version__)
+
+		# Notes
+		# Logits: Vector of raw (non-normalized) predictions that a classification model generates, normally then passed to a normalization function
+
+		# Load dataset
+		# mnist is 60k hand-drawn digits
+		mnist = tf.keras.datasets.mnist
+		(x_train, y_train), (x_test, y_test) = mnist.load_data()
+		# Images are 0->255 in value (black and white)
+		x_train, x_test = x_train / 255.0, x_test / 255.0
+
+		# Build model
+		# Input shape (28,28) is a matrix vector 28x28, likely the resolution of the image
+		# Dense (128) define a layer of 128 nodes
+		# Dropout (0.2) defines the fraction of input units to drop (my guess = 20%)
+		model = tf.keras.models.Sequential([
+	  		tf.keras.layers.Flatten(input_shape=(28, 28)),
+	  		tf.keras.layers.Dense(128, activation='relu'),
+	  		tf.keras.layers.Dropout(0.2),
+	  		tf.keras.layers.Dense(10)
+	  	])
+
+		# Define loss function
+		loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+
+		# Compile and configure model
+		# Adam algorithm is "omputationally efficient, has little memory requirement, invariant to diagonal rescaling of gradients, and is well suited for problems that are large in terms of data/parameters"
+		model.compile(optimizer='adam',
+              loss=loss_fn,
+              metrics=['accuracy'])
+
+		# Train and evaluate
+		model.fit(x_train, y_train, epochs=2)
+		model.evaluate(x_test,  y_test, verbose=2)
+
+		# Get probability
+		probability_model = tf.keras.Sequential([
+		  model,
+		  tf.keras.layers.Softmax()
+		])
+
+		pMod = probability_model(x_test[:2])
+		print (f"Probability: {pMod}")
+		#print (f"Probability Zero: "{pMod[0]})
+
+
 def main():
+	TF().run_example()
+	return
 	nlp = spacy.load("en_core_web_sm")
 	#nlp = spacy.load("en_core_web_trf")
-
 	while True:
 		text = input('> ')
 		doc = nlp(text)
