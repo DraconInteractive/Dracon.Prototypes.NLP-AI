@@ -13,86 +13,85 @@ from tensorflow.keras.layers import Input, Dense, LSTM, Reshape
 from tensorflow.keras.models import Sequential, Model
 
 nlp = spacy.load("en_core_web_sm")
+vocab = nlp.vocab
+word_to_int = {word.text: i for i, word in enumerate(vocab)}
+vocab_array = [word_to_int[word.text] for word in vocab]
+"""
+# Find the index of a specific word
+word = 'example'
+word_index = word_to_int[word]
+"""
 
+def get_x_vector(doc):
+	word_indices = [word_to_int.get(token.text, 0) for token in doc]
+	# 20 is the maximum sequence length
+	padded_indices = np.pad(word_indices, (0, 20 - len(word_indices)), mode='constant')
+	feature_vector = np.concatenate((padded_indices, doc.vector))
+	return feature_vector
+
+## TODO Convert 'keywords' into [0,0,0] where each integer is of a word in the input
 training_data = [
-    (nlp("Whats the weather like in Boston today"), ('information', 'search_weather', 'boston')),
-    (nlp("Whats the date today"), ('information', 'search_date', 'today')),
-    (nlp("What day is it today"), ('information', 'search_date', 'today')),
-    (nlp("Create a JSON document in root"), ('action', 'create_doc', 'json')),
-    (nlp("Run a test sequence"), ('action', 'run', 'test')),
-    (nlp("Open google for me"), ('action', 'run', 'google'))
+	(nlp("Whats the weather like in Perth today"), ('information', 'search_weather', 'perth')),
+	(nlp("Whats the date today"), ('information', 'search_date', 'today')),
+	(nlp("What day is it today"), ('information', 'search_date', 'today')),
+	(nlp("Create a JSON document in root"), ('action', 'create_doc', 'json')),
+	(nlp("Run a test sequence"), ('action', 'run', 'test')),
+	(nlp("Open google for me"), ('action', 'run', 'google'))
 ]
 
 intents = ['information', 'action']
 actions = ['search_weather', 'search_date', 'create_doc', 'run']
-keywords = ['boston', 'today', 'json', 'test', 'google']
+keywords = ['perth', 'today', 'json', 'test', 'google']
 
-num_samples = len(training_data)
 num_intents = len(intents)
 num_actions = len(actions)
 num_keywords = len(keywords)
 
 X = []
-y_intent = []
-y_action = []
-y_keyword = []
+Y = []
 for doc, (intent, action, keyword) in training_data:
-	# Convert doc to a feature vector
-	feature_vector = doc.vector
-	X.append(feature_vector)
+	X.append(get_x_vector(doc))
 
 	# One-hot encode the label vectors
-	intent_vec = np.zeros(num_intents)
 	intent_index = intents.index(intent)
-	intent_vec[intent_index] = 1
-	y_intent.append(intent_vec)
-
-	action_vec = np.zeros(num_actions)
 	action_index = actions.index(action)
-	action_vec[action_index] = 1
-	y_action.append(action_vec)
-
-	keyword_vec = np.zeros(num_keywords)
 	keyword_index = keywords.index(keyword)
-	keyword_vec[keyword_index] = 1
-	y_keyword.append(keyword_vec)
 
+	label = np.concatenate((tf.one_hot(intent_index, num_intents), tf.one_hot(action_index, num_actions), tf.one_hot(keyword_index, num_keywords)))
+	Y.append(label)
 
-# Convert the target variables to 2D numpy arrays
-X = np.array(X);
-input_shape = (6, 1, 96)
-inputs = Input(shape=input_shape)
-lstm = LSTM(64)(inputs)
+X = np.array(X)
+Y = np.array(Y)
 
-
-intent_output = Dense(num_intents, activation='softmax', name='intent')(lstm)
-action_output = Dense(num_actions, activation='softmax', name='action')(lstm)
-keyword_output = Dense(num_keywords, activation='softmax', name='keyword')(lstm)
-
-# Define the model
-model = Model(inputs=inputs, outputs={'intent': intent_output, 'action': action_output, 'keyword': keyword_output})
+model = Sequential()
+model.add(Dense(128, activation='relu', input_shape=(X.shape[1],)))
+model.add(Dense(num_intents + num_actions + num_keywords, activation='sigmoid', name='output'))
 
 # Compile the model
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-intent_arr = np.array(y_intent).reshape(num_samples, len(intents))
-action_arr = np.array(y_action).reshape(num_samples, len(actions))
-keyword_arr = np.array(y_keyword).reshape(num_samples, len(keywords))
-
-Y = {'intent': intent_arr, 'action': action_arr, 'keyword': keyword_arr}
-#Y = [y_intent, y_action, y_keyword]
-
 # Train the model on the dataset
 model.fit(X, Y, epochs=10)
 
-test_phrase = "cook me a wonderful dinner"
-test_vector = nlp(test_phrase).vector
+input()
+
+test_phrase = "when is the boston derby"
+test_vector = get_x_vector(nlp(test_phrase))
 prediction = model.predict(np.array([test_vector]))
 
-intent_label = np.argmax(prediction['intent'])
-action_label = np.argmax(prediction['action'])
-keyword_label = np.argmax(prediction['keyword'])
+# Extract the predicted label indices
+intent_pred, action_pred, keyword_pred = np.split(prediction[0], [num_intents, num_intents + num_actions])
 
+intent_index = np.argmax(intent_pred)
+action_index = np.argmax(action_pred)
+keyword_index = np.argmax(keyword_pred)
+
+# Look up the corresponding labels in the original lists
+intent_label = intents[intent_index]
+action_label = actions[action_index]
+keyword_label = keywords[keyword_index]
+
+# Print the predicted labels
 print("Intent: ", intent_label)
 print("Action: ", action_label)
 print("Keyword: ", keyword_label)
