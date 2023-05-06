@@ -12,7 +12,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input, Dense, LSTM, Reshape
 from tensorflow.keras.models import Sequential, Model
 
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_lg")
 vocab = nlp.vocab
 word_to_int = {word.text: i for i, word in enumerate(vocab)}
 vocab_array = [word_to_int[word.text] for word in vocab]
@@ -65,33 +65,38 @@ Y = np.array(Y)
 
 model = Sequential()
 model.add(Dense(128, activation='relu', input_shape=(X.shape[1],)))
+model.add(Dense(128, activation='relu'))
 model.add(Dense(num_intents + num_actions + num_keywords, activation='sigmoid', name='output'))
 
 # Compile the model
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 # Train the model on the dataset
-model.fit(X, Y, epochs=10)
+model.fit(X, Y, epochs=250)
 
-input()
+def test_model(phrase, model):
+	test_vector = get_x_vector(nlp(phrase))
+	print(f"Running test...\"{phrase}\"")
+	prediction = model.predict(np.array([test_vector]))
+	# Extract the predicted label indices
+	intent_pred, action_pred, keyword_pred = np.split(prediction[0], [num_intents, num_intents + num_actions])
 
-test_phrase = "when is the boston derby"
-test_vector = get_x_vector(nlp(test_phrase))
-prediction = model.predict(np.array([test_vector]))
+	intent_index = np.argmax(intent_pred)
+	action_index = np.argmax(action_pred)
+	keyword_index = np.argmax(keyword_pred)
 
-# Extract the predicted label indices
-intent_pred, action_pred, keyword_pred = np.split(prediction[0], [num_intents, num_intents + num_actions])
+	# Look up the corresponding labels in the original lists
+	intent_label = intents[intent_index]
+	action_label = actions[action_index]
+	keyword_label = keywords[keyword_index]
 
-intent_index = np.argmax(intent_pred)
-action_index = np.argmax(action_pred)
-keyword_index = np.argmax(keyword_pred)
+	# Print the predicted labels
+	print("\tIntent: ", intent_label)
+	print("\tAction: ", action_label)
+	print("\tKeyword: ", keyword_label)
 
-# Look up the corresponding labels in the original lists
-intent_label = intents[intent_index]
-action_label = actions[action_index]
-keyword_label = keywords[keyword_index]
+test_model("when is the perth derby", model)
+test_model("make me a word doc", model)
+test_model("open that file I was using", model)
 
-# Print the predicted labels
-print("Intent: ", intent_label)
-print("Action: ", action_label)
-print("Keyword: ", keyword_label)
+
